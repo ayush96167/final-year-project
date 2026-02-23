@@ -10,10 +10,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "framer-motion": "^12.34.3",
     "leaflet": "^1.9.4",
+    "leaflet.markercluster": "^1.5.3",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-leaflet": "^5.0.0",
+    "react-leaflet-cluster": "^4.0.0",
     "react-router-dom": "^7.13.0",
     "zustand": "^5.0.11"
   },

@@ -1,28 +1,18 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { useState } from "react";
-import { useBookingStore } from "../app/store/bookingStore";
+import { motion } from "framer-motion";
 
 export default function BookSlot() {
-  const navigate = useNavigate();
   const location = useLocation();
+  const navigate = useNavigate();
 
   const station = location.state?.station;
-
-  const bookSlot = useBookingStore((s) => s.bookSlot);
-  const isSlotBooked = useBookingStore((s) => s.isSlotBooked);
-
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
 
   if (!station) {
     return (
-      <div className="p-8">
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
         <p>No station selected.</p>
-        <button
-          className="mt-4 px-4 py-2 bg-blue-500 text-white rounded"
-          onClick={() => navigate("/map")}
-        >
-          Go Back to Map
-        </button>
       </div>
     );
   }
@@ -34,78 +24,82 @@ export default function BookSlot() {
     "10:30 – 11:00",
   ];
 
-  const bookedCount =
-    useBookingStore.getState().bookedSlots[station.id]?.length || 0;
-
   return (
-    <div className="min-h-screen bg-gray-100 p-8">
-      <h1 className="text-2xl font-bold mb-4">
-        🔌 Book Slot
-      </h1>
+    <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black text-white pt-24 px-6">
+      <motion.div
+        initial={{ opacity: 0, y: 40 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+        className="max-w-3xl mx-auto"
+      >
+        {/* HEADER */}
+        <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">
+          Book Charging Slot
+        </h1>
 
-      <div className="bg-white p-6 rounded shadow max-w-md">
-        <h2 className="font-semibold mb-2">
+        <p className="mt-2 text-gray-400">
           {station.name}
-        </h2>
-
-        <p className="text-sm text-gray-600 mb-4">
-          Available slots:{" "}
-          <span className="font-semibold">
-            {station.total - bookedCount} / {station.total}
-          </span>
         </p>
 
-        <div className="space-y-2">
-          {slots.map((slot) => {
-            const booked = isSlotBooked(station.id, slot);
+        {/* GLASS CARD */}
+        <motion.div
+          initial={{ scale: 0.95, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: 0.2 }}
+          className="mt-10 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-xl"
+        >
+          {/* STATION INFO */}
+          <div className="flex justify-between items-center mb-6">
+            <div>
+              <p className="text-gray-400 text-sm">Available Slots</p>
+              <p className="text-lg font-medium">
+                {station.available} / {station.total}
+              </p>
+            </div>
 
-            return (
-              <button
+            <span className="px-4 py-1 rounded-full text-xs bg-emerald-500/20 text-emerald-400">
+              Operational
+            </span>
+          </div>
+
+          {/* SLOT GRID */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {slots.map((slot) => (
+              <motion.button
                 key={slot}
-                disabled={booked}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
                 onClick={() => setSelectedSlot(slot)}
-                className={`w-full px-4 py-2 rounded border ${
-                  booked
-                    ? "bg-gray-300 cursor-not-allowed"
-                    : selectedSlot === slot
-                    ? "bg-emerald-500 text-white"
-                    : "bg-white"
+                className={`px-6 py-4 rounded-xl border transition text-left ${
+                  selectedSlot === slot
+                    ? "bg-emerald-500/20 border-emerald-400 text-emerald-300"
+                    : "bg-white/5 border-white/10 hover:border-white/30"
                 }`}
               >
-                {slot} {booked && "(Booked)"}
-              </button>
-            );
-          })}
-        </div>
+                <p className="font-medium">{slot}</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  Fast Charging Available
+                </p>
+              </motion.button>
+            ))}
+          </div>
 
-        <button
-          disabled={!selectedSlot}
-          className={`mt-4 w-full px-4 py-2 rounded text-white ${
-            selectedSlot
-              ? "bg-blue-600"
-              : "bg-gray-400 cursor-not-allowed"
-          }`}
-          onClick={() => {
-            if (!selectedSlot) return;
-
-            const bookingId = `EV-${Date.now()}`;
-
-bookSlot(station.id, selectedSlot);
-
-navigate("/receipt", {
-  state: {
-    bookingId,
-    stationName: station.name,
-    slot: selectedSlot,
-    date: new Date().toLocaleString(),
-  },
-});
-
-          }}
-        >
-          Confirm Booking
-        </button>
-      </div>
+          {/* CONFIRM BUTTON */}
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            disabled={!selectedSlot}
+            className={`mt-8 w-full py-4 rounded-full text-lg font-medium transition ${
+              selectedSlot
+                ? "bg-white text-black hover:bg-gray-200"
+                : "bg-gray-700 text-gray-400 cursor-not-allowed"
+            }`}
+            onClick={() => navigate("/receipt")}
+          >
+            Confirm Booking
+          </motion.button>
+        </motion.div>
+      </motion.div>
     </div>
   );
 }

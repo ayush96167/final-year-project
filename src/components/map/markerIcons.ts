@@ -9,9 +9,9 @@ function createIcon(color: string) {
         <circle cx="12" cy="9" r="2.5" fill="white"/>
       </svg>
     `,
-    iconSize: [24, 24],
-    iconAnchor: [12, 24],
-    popupAnchor: [0, -24],
+    iconSize: [28, 28],
+iconAnchor: [14, 28],
+popupAnchor: [0, -28],
   });
 }
 

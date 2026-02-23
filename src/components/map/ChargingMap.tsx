@@ -14,6 +14,10 @@ import { useMapEvents } from "react-leaflet";
 import { greenIcon, yellowIcon, redIcon } from "./markerIcons";
 import { haversineDistance } from "../../utils/geo";
 import { useMap } from "react-leaflet";
+import MarkerClusterGroup from "react-leaflet-cluster";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
+import "../../styles/cluster.css";
 
 /* ------------------ CONFIG ------------------ */
 const MAX_RANGE_KM = 300;
@@ -56,6 +60,7 @@ function stationScore(
 
 /* ------------------ TYPES ------------------ */
 type StationWithDistance = {
+  powerKW: string;
   id: number;
   name: string;
   lat: number;
@@ -82,6 +87,9 @@ export default function ChargingMap() {
   const [searchText, setSearchText] = useState("");
   const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
   const [radiusKm, setRadiusKm] = useState(25);
+  const [selectedStation, setSelectedStation] = useState<any | null>(null);
+  const [loading, setLoading] = useState(false);
+
   function MapEvents({
   onMove,
   onZoom,
@@ -110,14 +118,18 @@ export default function ChargingMap() {
       setUserLocation([latitude, longitude]);
 
       try {
+        setLoading(true); // 🔵 START LOADING
+
         const [lat, lng] = mapCenter ?? [latitude, longitude];
-        const rawStations = await fetchChargingStations( 
-        lat,
-        lng,  
-        radiusKm
+
+        const rawStations = await fetchChargingStations(
+          lat,
+          lng,
+          radiusKm
         );
 
-        const normalizedStations = rawStations.map(normalizeOCMStation);
+        const normalizedStations =
+          rawStations.map(normalizeOCMStation);
 
         let nearestId: number | null = null;
         let minDistance = Infinity;
@@ -152,8 +164,11 @@ export default function ChargingMap() {
 
         setNearestStationId(nearestId);
         setSortedStations(enriched);
+
       } catch (err) {
         console.error("OpenChargeMap fetch failed", err);
+      } finally {
+        setLoading(false); // 🟢 ALWAYS STOP LOADING
       }
     },
     () => console.error("Location permission denied")
@@ -214,16 +229,19 @@ export default function ChargingMap() {
         </div>
 
         {/* Station cards */}
-        <div className="p-2 space-y-3">
+        
+        <div className="p-2 space-y-3" 
+        >
           {sortedStations.map((station) => (
-            <div
-              key={station.id}
-              className={`p-4 rounded-lg border shadow-sm transition ${
-                station.id === nearestStationId
-                  ? "border-emerald-400 bg-emerald-50"
-                  : "hover:shadow-md bg-white"
-              }`}
-            >
+           <div
+  key={station.id}
+  onClick={() => setSelectedStation(station)}
+  className={`cursor-pointer p-4 rounded-lg border shadow-sm transition ${
+    station.id === nearestStationId
+      ? "border-emerald-400 bg-emerald-50"
+      : "hover:shadow-md bg-white"
+  }`}
+>
               <div className="flex justify-between items-start">
                 <h3 className="font-semibold text-sm">
                   {station.name}
@@ -256,6 +274,7 @@ export default function ChargingMap() {
                 >
                   Book
                 </button>
+                
               </div>
 
               {!station.reachable && (
@@ -275,12 +294,19 @@ export default function ChargingMap() {
       </div>
 
       {/* ---------------- MAP ---------------- */}
-      <div className="md:w-2/3 w-full">
+      <div className="md:w-2/3 w-full relative bg-black/20 p-2">
+      {loading && (
+    <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-[999]">
+      <div className="bg-white px-4 py-2 rounded shadow">
+        Loading charging stations…
+      </div>
+    </div>
+  )}
         <MapContainer
         
           center={[28.6139, 77.209]}
           zoom={12}
-          className="w-full h-full"
+          className="w-full h-full  rounded-xl shadow-lg"
           
         >
           <RecenterMap center={mapCenter} />
@@ -297,9 +323,9 @@ export default function ChargingMap() {
             
           
           <TileLayer
-            attribution="&copy; OpenStreetMap contributors"
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
+  attribution="© OpenStreetMap contributors"
+  url="https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png"
+/>
 
           {userLocation && (
             <CircleMarker
@@ -311,31 +337,118 @@ export default function ChargingMap() {
             </CircleMarker>
           )}
 
-          {sortedStations.map((station) => (
-            <Marker
-              key={station.id}
-              position={[station.lat, station.lng]}
-              icon={getMarkerIcon(station.available, station.total)}
-            >
-              <Popup>
-                <div className="text-sm space-y-2">
-                  <h3 className="font-bold">{station.name}</h3>
-                  <p>
-                    Slots: {station.available} / {station.total}
-                  </p>
-                  <button
-                    className="px-3 py-1 bg-emerald-500 text-white rounded text-sm"
-                    onClick={() =>
-                      navigate("/book", { state: { station } })
-                    }
-                  >
-                    Book Slot
-                  </button>
-                </div>
-              </Popup>
-            </Marker>
-          ))}
+          <MarkerClusterGroup
+            chunkedLoading
+            spiderfyOnMaxZoom
+            showCoverageOnHover={false}
+           >
+  {sortedStations.map((station) => (
+    <Marker
+      key={station.id}
+      position={[station.lat, station.lng]}
+      icon={getMarkerIcon(station.available, station.total)}
+      eventHandlers={{
+        click: () => {
+          setSelectedStation(station);
+        },
+      }}
+    >
+      <Popup>
+        <div className="w-56 text-sm">
+          <h3 className="font-semibold text-base mb-1">
+            {station.name}
+          </h3>
+
+          <p className="text-gray-400 text-xs mb-2">
+            ⚡ {station. powerKW || "N/A"} kW
+          </p>
+
+          <div className="flex justify-between text-xs mb-2">
+            <span>Slots</span>
+            <span className="font-medium">
+              {station.available}/{station.total}
+            </span>
+          </div>
+
+          <button
+            className="w-full mt-2 bg-emerald-500 hover:bg-emerald-600 text-white py-1 rounded text-sm"
+            onClick={() =>
+              navigate("/book", { state: { station } })
+            }
+          >
+            Book Slot
+          </button>
+        </div>
+      </Popup>
+    </Marker>
+  ))}
+</MarkerClusterGroup>
         </MapContainer>
+        {selectedStation && (
+  <div className="absolute right-0 top-14 h-[calc(100%-56px)] w-full md:w-96 bg-white border-l shadow-xl z-[1000] overflow-y-auto">
+    <div className="p-4 border-b flex justify-between items-center">
+      <h2 className="font-bold text-lg">
+        {selectedStation.name}
+      </h2>
+
+      <button
+        className="text-gray-500 hover:text-black"
+        onClick={() => setSelectedStation(null)}
+      >
+        ✕
+      </button>
+    </div>
+
+    <div className="p-4 space-y-4 text-sm">
+      <div>
+        <p className="text-gray-500">Distance</p>
+        <p>{selectedStation.distance.toFixed(2)} km</p>
+      </div>
+
+      <div>
+        <p className="text-gray-500">Max Power</p>
+        <p>⚡ {selectedStation.powerKW || "N/A"} kW</p>
+      </div>
+
+      <div>
+        <p className="text-gray-500">Connectors</p>
+        <ul className="list-disc ml-5">
+          {(selectedStation.connectorTypes || []).map(
+            (type: string, i: number) => (
+              <li key={i}>{type}</li>
+            )
+          )}
+        </ul>
+      </div>
+
+      <div>
+        <p className="text-gray-500">Status</p>
+        <span
+          className={`inline-block px-2 py-1 rounded text-xs ${
+            selectedStation.isOperational
+              ? "bg-green-100 text-green-700"
+              : "bg-red-100 text-red-600"
+          }`}
+        >
+          {selectedStation.isOperational
+            ? "Operational"
+            : "Unavailable"}
+        </span>
+      </div>
+
+      <button
+        className="w-full py-2 bg-emerald-500 text-white rounded hover:bg-emerald-600"
+        onClick={() =>
+          navigate("/book", {
+            state: { station: selectedStation },
+          })
+        }
+      >
+        Book Slot
+      </button>
+    </div>
+  </div>
+)}
       </div>
     </div>
   );

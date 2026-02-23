@@ -1,18 +1,49 @@
-import { Link } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 export default function Navbar() {
-  return (
-    <div className="h-14 bg-gray-900 text-white flex items-center justify-between px-6">
-      <h1 className="font-bold text-lg">⚡ EV Charge</h1>
+  const navigate = useNavigate();
+  const location = useLocation();
 
-      <div className="space-x-4 text-sm">
-        <Link to="/map" className="hover:text-emerald-400">
-          Map
-        </Link>
-        <Link to="/trip" className="hover:text-emerald-400">
-          Trip Planner
-        </Link>
+  const isHome = location.pathname === "/";
+
+  return (
+    <nav
+      className={`fixed top-0 left-0 w-full z-50 transition-all duration-300
+        ${isHome ? "bg-transparent" : "bg-white shadow-sm"}
+      `}
+    >
+      <div className="max-w-7xl mx-auto px-8 py-4 flex items-center justify-between">
+        {/* Logo */}
+        <span
+          onClick={() => navigate("/")}
+          className={`cursor-pointer text-sm font-semibold tracking-widest
+            ${isHome ? "text-white" : "text-black"}
+          `}
+        >
+          EV·CHARGE
+        </span>
+
+        {/* Links */}
+        <div
+          className={`flex gap-8 text-sm font-medium
+            ${isHome ? "text-white" : "text-gray-800"}
+          `}
+        >
+          <button
+            onClick={() => navigate("/map")}
+            className="hover:opacity-70 transition"
+          >
+            Find Chargers
+          </button>
+
+          <button
+            onClick={() => navigate("/book")}
+            className="hover:opacity-70 transition"
+          >
+            Book Slot
+          </button>
+        </div>
       </div>
-    </div>
+    </nav>
   );
 }
