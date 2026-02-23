@@ -7,10 +7,13 @@ import {
 } from "react-leaflet";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-
-import { chargingStations } from "../../data/stations";
+import { fetchChargingStations } from "../../services/openChargeMap";
+import { normalizeOCMStation } from "../../utils/normalizeOCMStation";
+import { geocodePlace } from "../../services/geocode";
+import { useMapEvents } from "react-leaflet";
 import { greenIcon, yellowIcon, redIcon } from "./markerIcons";
 import { haversineDistance } from "../../utils/geo";
+import { useMap } from "react-leaflet";
 
 /* ------------------ CONFIG ------------------ */
 const MAX_RANGE_KM = 300;
@@ -20,6 +23,19 @@ function getMarkerIcon(available: number, total: number) {
   if (available === 0) return redIcon;
   if (available / total <= 0.3) return yellowIcon;
   return greenIcon;
+}
+function RecenterMap({ center }: { center: [number, number] | null }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (center) {
+      map.setView(center, map.getZoom(), {
+        animate: true,
+      });
+    }
+  }, [center]);
+
+  return null;
 }
 
 function canReach(distance: number, battery: number) {
@@ -51,6 +67,7 @@ type StationWithDistance = {
   score: number;
 };
 
+
 /* ------------------ COMPONENT ------------------ */
 export default function ChargingMap() {
   const navigate = useNavigate();
@@ -62,51 +79,86 @@ export default function ChargingMap() {
     useState<number | null>(null);
   const [sortedStations, setSortedStations] =
     useState<StationWithDistance[]>([]);
+  const [searchText, setSearchText] = useState("");
+  const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
+  const [radiusKm, setRadiusKm] = useState(25);
+  function MapEvents({
+  onMove,
+  onZoom,
+}: {
+  onMove: (lat: number, lng: number) => void;
+  onZoom: (zoom: number) => void;
+}) {
+  useMapEvents({
+    moveend: (e) => {
+      const center = e.target.getCenter();
+      onMove(center.lat, center.lng);
+    },
+    zoomend: (e) => {
+      onZoom(e.target.getZoom());
+    },
+  });
 
+  return null;
+}
   useEffect(() => {
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords;
-        setUserLocation([latitude, longitude]);
+  if (!navigator.geolocation) return;
+
+  navigator.geolocation.getCurrentPosition(
+    async (position) => {
+      const { latitude, longitude } = position.coords;
+      setUserLocation([latitude, longitude]);
+
+      try {
+        const [lat, lng] = mapCenter ?? [latitude, longitude];
+        const rawStations = await fetchChargingStations( 
+        lat,
+        lng,  
+        radiusKm
+        );
+
+        const normalizedStations = rawStations.map(normalizeOCMStation);
 
         let nearestId: number | null = null;
         let minDistance = Infinity;
 
-        const enriched: StationWithDistance[] = chargingStations.map(
-          (station) => {
-            const distance = haversineDistance(
-              latitude,
-              longitude,
-              station.lat,
-              station.lng
-            );
+        const enriched = normalizedStations.map((station: any) => {
+          const distance = haversineDistance(
+            latitude,
+            longitude,
+            station.lat,
+            station.lng
+          );
 
-            if (distance < minDistance) {
-              minDistance = distance;
-              nearestId = station.id;
-            }
-
-            return {
-              ...station,
-              distance,
-              reachable: canReach(distance, battery),
-              score: stationScore(
-                distance,
-                station.available,
-                station.total,
-                battery
-              ),
-            };
+          if (distance < minDistance) {
+            minDistance = distance;
+            nearestId = station.id;
           }
-        );
 
-        enriched.sort((a, b) => a.score - b.score);
+          return {
+            ...station,
+            distance,
+            reachable: canReach(distance, battery),
+            score: stationScore(
+              distance,
+              station.available,
+              station.total,
+              battery
+            ),
+          };
+        });
+
+        enriched.sort((a: any, b: any) => a.score - b.score);
+
         setNearestStationId(nearestId);
         setSortedStations(enriched);
-      },
-      () => console.error("Location access denied")
-    );
-  }, [battery]);
+      } catch (err) {
+        console.error("OpenChargeMap fetch failed", err);
+      }
+    },
+    () => console.error("Location permission denied")
+  );
+}, [battery, mapCenter, radiusKm]);
 
   return (
     <div className="flex flex-col md:flex-row h-[calc(100vh-56px)]">
@@ -117,7 +169,27 @@ export default function ChargingMap() {
           <h2 className="text-lg font-bold mb-2">
             Nearby Charging Stations
           </h2>
+          <div className="p-4 border-b">
+  <input
+    type="text"
+    placeholder="Search city or place..."
+    value={searchText}
+    onChange={(e) => setSearchText(e.target.value)}
+    className="w-full px-3 py-2 border rounded"
+  />
 
+  <button
+    className="mt-2 w-full bg-emerald-500 text-white py-1 rounded"
+    onClick={async () => {
+      const result = await geocodePlace(searchText);
+      if (!result) return;
+
+      setMapCenter([result.lat, result.lng]);
+    }}
+  >
+    Search
+  </button>
+</div>
           <div>
             <div className="flex justify-between text-sm mb-1">
               <span>Battery</span>
@@ -205,10 +277,25 @@ export default function ChargingMap() {
       {/* ---------------- MAP ---------------- */}
       <div className="md:w-2/3 w-full">
         <MapContainer
+        
           center={[28.6139, 77.209]}
           zoom={12}
           className="w-full h-full"
+          
         >
+          <RecenterMap center={mapCenter} />
+          <MapEvents
+              onMove={(lat, lng) => {
+                setMapCenter([lat, lng]);
+              }}
+              onZoom={(zoom) => {
+                if (zoom >= 13) setRadiusKm(10);
+                else if (zoom >= 11) setRadiusKm(25);
+                else setRadiusKm(50);
+              }}
+            />
+            
+          
           <TileLayer
             attribution="&copy; OpenStreetMap contributors"
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -224,7 +311,7 @@ export default function ChargingMap() {
             </CircleMarker>
           )}
 
-          {chargingStations.map((station) => (
+          {sortedStations.map((station) => (
             <Marker
               key={station.id}
               position={[station.lat, station.lng]}
