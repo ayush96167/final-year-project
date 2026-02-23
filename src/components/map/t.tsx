@@ -4,31 +4,42 @@ import {
   Marker,
   Popup,
   CircleMarker,
-  useMap,
-  useMapEvents,
 } from "react-leaflet";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import MarkerClusterGroup from "react-leaflet-cluster";
-
 import { fetchChargingStations } from "../../services/openChargeMap";
 import { normalizeOCMStation } from "../../utils/normalizeOCMStation";
 import { geocodePlace } from "../../services/geocode";
-import { haversineDistance } from "../../utils/geo";
+import { useMapEvents } from "react-leaflet";
 import { greenIcon, yellowIcon, redIcon } from "./markerIcons";
-
+import { haversineDistance } from "../../utils/geo";
+import { useMap } from "react-leaflet";
+import MarkerClusterGroup from "react-leaflet-cluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import "../../styles/cluster.css";
 
-/* ---------------- CONFIG ---------------- */
+/* ------------------ CONFIG ------------------ */
 const MAX_RANGE_KM = 300;
 
-/* ---------------- HELPERS ---------------- */
+/* ------------------ HELPERS ------------------ */
 function getMarkerIcon(available: number, total: number) {
   if (available === 0) return redIcon;
   if (available / total <= 0.3) return yellowIcon;
   return greenIcon;
+}
+function RecenterMap({ center }: { center: [number, number] | null }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (center) {
+      map.setView(center, map.getZoom(), {
+        animate: true,
+      });
+    }
+  }, [center]);
+
+  return null;
 }
 
 function canReach(distance: number, battery: number) {
@@ -47,20 +58,39 @@ function stationScore(
   return distance * 0.5 + congestion * 30 + batteryRisk * 20;
 }
 
-/* ---------------- MAP HELPERS ---------------- */
-function RecenterMap({ center }: { center: [number, number] | null }) {
-  const map = useMap();
+/* ------------------ TYPES ------------------ */
+type StationWithDistance = {
+  powerKW: string;
+  id: number;
+  name: string;
+  lat: number;
+  lng: number;
+  available: number;
+  total: number;
+  distance: number;
+  reachable: boolean;
+  score: number;
+};
 
-  useEffect(() => {
-    if (center) {
-      map.setView(center, map.getZoom(), { animate: true });
-    }
-  }, [center, map]);
 
-  return null;
-}
+/* ------------------ COMPONENT ------------------ */
+export default function ChargingMap() {
+  const navigate = useNavigate();
 
-function MapEvents({
+  const [battery, setBattery] = useState(50);
+  const [userLocation, setUserLocation] =
+    useState<[number, number] | null>(null);
+  const [nearestStationId, setNearestStationId] =
+    useState<number | null>(null);
+  const [sortedStations, setSortedStations] =
+    useState<StationWithDistance[]>([]);
+  const [searchText, setSearchText] = useState("");
+  const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
+  const [radiusKm, setRadiusKm] = useState(25);
+  const [selectedStation, setSelectedStation] = useState<any | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  function MapEvents({
   onMove,
   onZoom,
 }: {
@@ -69,101 +99,86 @@ function MapEvents({
 }) {
   useMapEvents({
     moveend: (e) => {
-      const c = e.target.getCenter();
-      onMove(c.lat, c.lng);
+      const center = e.target.getCenter();
+      onMove(center.lat, center.lng);
     },
     zoomend: (e) => {
       onZoom(e.target.getZoom());
     },
   });
+
   return null;
 }
-
-/* ---------------- TYPES ---------------- */
-type StationWithDistance = {
-  id: number;
-  name: string;
-  lat: number;
-  lng: number;
-  available: number;
-  total: number;
-  powerKW?: string;
-  distance: number;
-  reachable: boolean;
-  score: number;
-};
-
-/* ---------------- COMPONENT ---------------- */
-export default function ChargingMap() {
-  const navigate = useNavigate();
-
-  const [battery, setBattery] = useState(50);
-  const [userLocation, setUserLocation] =
-    useState<[number, number] | null>(null);
-  const [sortedStations, setSortedStations] =
-    useState<StationWithDistance[]>([]);
-  const [nearestStationId, setNearestStationId] =
-    useState<number | null>(null);
-
-  const [searchText, setSearchText] = useState("");
-  const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
-  const [radiusKm, setRadiusKm] = useState(25);
-  const [selectedStation, setSelectedStation] = useState<any | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  /* ---------------- FETCH DATA ---------------- */
   useEffect(() => {
-    if (!navigator.geolocation) return;
+  if (!navigator.geolocation) return;
 
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const { latitude, longitude } = pos.coords;
-        setUserLocation([latitude, longitude]);
+  navigator.geolocation.getCurrentPosition(
+    async (position) => {
+      const { latitude, longitude } = position.coords;
+      setUserLocation([latitude, longitude]);
 
-        try {
-          setLoading(true);
+      try {
+        setLoading(true); // 🔵 START LOADING
 
-          const [lat, lng] = mapCenter ?? [latitude, longitude];
-          const raw = await fetchChargingStations(lat, lng, radiusKm);
-          const normalized = raw.map(normalizeOCMStation);
+        const [lat, lng] = mapCenter ?? [latitude, longitude];
 
-          let nearestId: number | null = null;
-          let minDistance = Infinity;
+        const rawStations = await fetchChargingStations(
+          lat,
+          lng,
+          radiusKm
+        );
 
-          const enriched = normalized.map((s: any) => {
-            const d = haversineDistance(latitude, longitude, s.lat, s.lng);
-            if (d < minDistance) {
-              minDistance = d;
-              nearestId = s.id;
-            }
+        const normalizedStations =
+          rawStations.map(normalizeOCMStation);
 
-            return {
-              ...s,
-              distance: d,
-              reachable: canReach(d, battery),
-              score: stationScore(d, s.available, s.total, battery),
-            };
-          });
+        let nearestId: number | null = null;
+        let minDistance = Infinity;
 
-          enriched.sort((a, b) => a.score - b.score);
-          setNearestStationId(nearestId);
-          setSortedStations(enriched);
-        } catch (e) {
-          console.error("Fetch failed", e);
-        } finally {
-          setLoading(false);
-        }
-      },
-      () => console.error("Location denied")
-    );
-  }, [battery, mapCenter, radiusKm]);
+        const enriched = normalizedStations.map((station: any) => {
+          const distance = haversineDistance(
+            latitude,
+            longitude,
+            station.lat,
+            station.lng
+          );
 
-  /* ---------------- UI ---------------- */
-  return (
-   <div className="flex h-[calc(100vh-56px)] w-full bg-gradient-to-br from-black via-gray-900 to-black text-white overflow-hidden">
+          if (distance < minDistance) {
+            minDistance = distance;
+            nearestId = station.id;
+          }
 
-      {/* LEFT PANEL (unchanged UI) */}
-  {/* ---------------- LEFT PANEL ---------------- */}
+          return {
+            ...station,
+            distance,
+            reachable: canReach(distance, battery),
+            score: stationScore(
+              distance,
+              station.available,
+              station.total,
+              battery
+            ),
+          };
+        });
+
+        enriched.sort((a: any, b: any) => a.score - b.score);
+
+        setNearestStationId(nearestId);
+        setSortedStations(enriched);
+
+      } catch (err) {
+        console.error("OpenChargeMap fetch failed", err);
+      } finally {
+        setLoading(false); // 🟢 ALWAYS STOP LOADING
+      }
+    },
+    () => console.error("Location permission denied")
+  );
+}, [battery, mapCenter, radiusKm]);
+
+return (
+  <div className="flex flex-col md:flex-row h-[calc(100vh-56px)] bg-gradient-to-br from-black via-gray-900 to-black text-white">
+
+    {/* ---------------- LEFT PANEL ---------------- */}
     <div className="md:w-1/3 w-full h-full p-6">
       <div className="h-full bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-xl flex flex-col">
 
@@ -285,64 +300,12 @@ export default function ChargingMap() {
       </div>
     </div>
 
-      {/* MAP */}
-      <div className="md:w-2/3 w-full p-4">
-        <div className="relative w-full h-full rounded-2xl overflow-hidden shadow-2xl">
-
-          {loading && (
-            <div className="absolute inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-[999]">
-              <div className="bg-white text-black px-6 py-3 rounded-full text-sm">
-                Loading charging stations…
-              </div>
-            </div>
-          )}
-
-          <MapContainer
-            center={[28.6139, 77.209]}
-            zoom={12}
-            className="w-full h-full"
-          >
-            <RecenterMap center={mapCenter} />
-
-            <MapEvents
-              onMove={(lat, lng) => setMapCenter([lat, lng])}
-              onZoom={(z) => {
-                if (z >= 13) setRadiusKm(10);
-                else if (z >= 11) setRadiusKm(25);
-                else setRadiusKm(50);
-              }}
-            />
-
-            <TileLayer
-              attribution="© OpenStreetMap contributors"
-              url="https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png"
-            />
-
-            {userLocation && (
-              <CircleMarker
-                center={userLocation}
-                radius={10}
-                pathOptions={{ color: "#3b82f6", fillOpacity: 0.9 }}
-              />
-            )}
-
-            <MarkerClusterGroup>
-              {sortedStations.map((s) => (
-                <Marker
-                  key={s.id}
-                  position={[s.lat, s.lng]}
-                  icon={getMarkerIcon(s.available, s.total)}
-                  eventHandlers={{
-                    click: () => setSelectedStation(s),
-                  }}
-                >
-                  <Popup>{s.name}</Popup>
-                </Marker>
-              ))}
-            </MarkerClusterGroup>
-          </MapContainer>
-        </div>
+    {/* ---------------- MAP ---------------- */}
+    <div className="md:w-2/3 w-full p-4">
+      <div className="w-full h-full rounded-2xl overflow-hidden shadow-2xl">
+        {/* Your MapContainer goes here */}
       </div>
     </div>
-  );
-}
+
+  </div>
+);
