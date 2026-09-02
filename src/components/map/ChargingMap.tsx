@@ -11,7 +11,7 @@ import {
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import MarkerClusterGroup from "react-leaflet-cluster";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 
 import { fetchChargingStations } from "../../services/openChargeMap";
 import { normalizeOCMStation } from "../../utils/normalizeOCMStation";
@@ -112,7 +112,7 @@ export default function ChargingMap() {
   const [searchText, setSearchText] = useState("");
   const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
   const [radiusKm, setRadiusKm] = useState(25);
-  const [selectedStation, setSelectedStation] = useState<any | null>(null);
+  const [_selectedStation, setSelectedStation] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
   
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);

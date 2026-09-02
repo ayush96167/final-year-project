@@ -53,7 +53,7 @@ export default function TripPlanner() {
   const [routeDistanceKm, setRouteDistanceKm] = useState(0);
   
   const [userPoints, setUserPoints] = useState<[number, number][]>([]);
-  const [allStations, setAllStations] = useState<any[]>([]);
+  const [_allStations, setAllStations] = useState<any[]>([]);
   const [mandatoryStops, setMandatoryStops] = useState<any[]>([]);
   const [suggestedStops, setSuggestedStops] = useState<any[]>([]);
   
