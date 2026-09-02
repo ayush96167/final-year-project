@@ -231,9 +231,12 @@ export default function ChargingMap() {
   }, [activeOrigin, navigationTarget]);
 
   /* ---------------- UI ---------------- */
-  const mapTileUrl = isDark 
-    ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-    : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
+  const cartoApiKey = import.meta.env.VITE_CARTO_API_KEY;
+  const mapTileUrl = cartoApiKey
+    ? (isDark
+        ? `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?api_key=${cartoApiKey}`
+        : `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?api_key=${cartoApiKey}`)
+    : "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 
   return (
     <div className="relative w-full h-full overflow-hidden text-[#1d1d1f] dark:text-gray-100 bg-[#fbfbfd] dark:bg-[#121212]">
@@ -266,6 +269,7 @@ export default function ChargingMap() {
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url={mapTileUrl}
+            className={isDark && !cartoApiKey ? "dark-map-tiles" : ""}
           />
 
           {/* ACTIVE ORIGIN (GPS or Manual) */}

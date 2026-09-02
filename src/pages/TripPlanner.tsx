@@ -60,9 +60,12 @@ export default function TripPlanner() {
   const [loading, setLoading] = useState(false);
   const [mapCenter, setMapCenter] = useState<[number, number]>([28.6139, 77.209]);
 
-  const mapTileUrl = isDark 
-    ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-    : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
+  const cartoApiKey = import.meta.env.VITE_CARTO_API_KEY;
+  const mapTileUrl = cartoApiKey
+    ? (isDark 
+        ? `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?api_key=${cartoApiKey}`
+        : `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?api_key=${cartoApiKey}`)
+    : "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 
   const updateWaypoint = (index: number, value: string) => {
     const newWs = [...waypoints];
@@ -200,6 +203,7 @@ export default function TripPlanner() {
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url={mapTileUrl}
+            className={isDark && !cartoApiKey ? "dark-map-tiles" : ""}
           />
 
           {userPoints.map((pt, i) => (
