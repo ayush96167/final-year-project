@@ -1,3 +1,6 @@
+const OPENCHARGE_API_KEY =
+  import.meta.env.VITE_OPENCHARGE_API_KEY || "8bd90b35-ea91-47a3-af1f-3db0305a0141";
+
 export async function fetchChargingStations(
   lat: number,
   lng: number,
@@ -7,7 +10,7 @@ export async function fetchChargingStations(
     `https://api.openchargemap.io/v3/poi/?output=json&latitude=${lat}&longitude=${lng}&distance=${distanceKm}&distanceunit=KM&maxresults=200`,
     {
       headers: {
-        "X-API-Key": import.meta.env.VITE_OPENCHARGE_API_KEY,
+        "X-API-Key": OPENCHARGE_API_KEY,
       },
     }
   );
@@ -29,7 +32,7 @@ export async function fetchStationsInBoundingBox(
     `https://api.openchargemap.io/v3/poi/?output=json&boundingbox=(${minLat},${minLng}),(${maxLat},${maxLng})&maxresults=500`,
     {
       headers: {
-        "X-API-Key": import.meta.env.VITE_OPENCHARGE_API_KEY,
+        "X-API-Key": OPENCHARGE_API_KEY,
       },
     }
   );
